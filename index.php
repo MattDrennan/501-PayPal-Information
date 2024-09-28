@@ -131,7 +131,7 @@ $transactions = getTransactions($accessToken, $transactionsUrl, $startDateISO, $
 
 $transactions = array_filter($transactions, 'is_array');
 
-echo '<p><i>Please note due to PayPal API limitations, only the last 31 days can be displayed at a time.</i></p>';
+echo '<p><i>Please note due to PayPal API limitations, only 31 days can be displayed at a time.</i></p>';
 
 echo '<hr />';
 
