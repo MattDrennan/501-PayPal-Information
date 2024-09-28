@@ -6,6 +6,40 @@ echo '
 <html>
 <head>
 <title>FLG Website PayPal Information</title>
+<script>
+// JavaScript function to validate date range
+function validateDateRange() {
+    var startDate = new Date(document.getElementById("start_date").value);
+    var endDate = new Date(document.getElementById("end_date").value);
+    var timeDiff = endDate - startDate;
+    var daysDiff = timeDiff / (1000 * 3600 * 24);
+
+    if (startDate > endDate) {
+        alert("The start date must be less than or equal to the end date.");
+        return false; // Prevent form submission
+    }
+
+    if (daysDiff > 31) {
+        alert("The date range cannot be more than 31 days.");
+        return false; // Prevent form submission
+    }
+    return true; // Allow form submission
+}
+
+// JavaScript function to set default dates
+function setDefaultDates() {
+    var endDate = new Date(); // Current date
+    var startDate = new Date();
+    startDate.setDate(endDate.getDate() - 31); // 31 days before current date
+
+    // Format dates as YYYY-MM-DD
+    document.getElementById("start_date").value = startDate.toISOString().split(\'T\')[0];
+    document.getElementById("end_date").value = endDate.toISOString().split(\'T\')[0];
+}
+
+// Set default dates on page load
+window.onload = setDefaultDates;
+</script>
 </head>
 
 <body>';
@@ -57,25 +91,43 @@ function getTransactions($accessToken, $transactionsUrl, $startDate, $endDate) {
 // Step 1: Get the access token
 $accessToken = getAccessToken($clientId, $clientSecret, $authUrl);
 
-// Step 2: Define the start date 31 days ago in ISO 8601 format with UTC timezone
-$startDate = date("Y-m-d\TH:i:s\Z", strtotime("-31 days")); // 31 days ago in UTC
+// Set default values if no date is selected
+if (!isset($_GET['start_date'])) {
+    $startDate = date("Y-m-d", strtotime("-31 days"));
+} else {
+    $startDate = $_GET['start_date'];
+}
 
-// Step 2.1: Ensure correct timezone for current time
-date_default_timezone_set('UTC'); // Set the desired timezone
+if (!isset($_GET['end_date'])) {
+    $endDate = date("Y-m-d");
+} else {
+    $endDate = $_GET['end_date'];
+}
 
-// Step 2.2: Get the current date and time in the correct ISO 8601 format with timezone offset
-$endDate = date("Y-m-d\TH:i:s") . "Z"; // Using 'Z' for UTC format
+// Convert selected dates to ISO 8601 format with UTC timezone for API
+$startDateISO = $startDate . "T00:00:00Z";
+$endDateISO = $endDate . "T23:59:59Z";
 
 // Convert dates to a more readable format
-$readableStartDate = date("l, F j, Y g:iA", strtotime($startDate)); // e.g., Monday, August 22, 2024 5:00PM
-$readableEndDate = date("l, F j, Y g:iA", strtotime($endDate));     // e.g., Monday, September 28, 2024 5:00PM
+$readableStartDate = date("l, F j, Y", strtotime($startDate)); // e.g., Monday, August 22, 2024
+$readableEndDate = date("l, F j, Y", strtotime($endDate));     // e.g., Monday, September 28, 2024
+
+// Display the form with date selection and validation
+echo '
+<form method="GET" action="" onsubmit="return validateDateRange()">
+    <label for="start_date">Start Date:</label>
+    <input type="date" id="start_date" name="start_date" required>
+    <label for="end_date">End Date:</label>
+    <input type="date" id="end_date" name="end_date" required>
+    <input type="submit" value="Load Transactions">
+</form>
+<br />';
 
 // Display the readable dates
-echo "Start Date: $readableStartDate<br /><br />";
-echo "End Date: $readableEndDate";
+echo "Displaying transactions from <b>$readableStartDate</b> to <b>$readableEndDate</b>.<br /><br />";
 
-// Step 3: Get the transactions
-$transactions = getTransactions($accessToken, $transactionsUrl, $startDate, $endDate);
+// Step 3: Get the transactions based on selected dates
+$transactions = getTransactions($accessToken, $transactionsUrl, $startDateISO, $endDateISO);
 
 $transactions = array_filter($transactions, 'is_array');
 
@@ -86,23 +138,22 @@ echo '<hr />';
 echo '<ol>';
 
 // Step 4: Loop through transactions and display
-foreach ($transactions as $transaction) {
-	//echo "<pre>";
-	//print_r($transaction);
-	//echo "</pre>";
-	foreach ($transaction as $key => $object) {
-		if(!empty($object['payer_info']['payer_name'])) {
-			if($object['transaction_info']['transaction_amount']['value'] < 0) {
-				echo '<li><span style="color: red;">' . date("l, F j, Y g:iA", strtotime($object['transaction_info']['transaction_initiation_date'])) . ': ' . $object['payer_info']['payer_name']['alternate_full_name'] . ' : $' . $object['transaction_info']['transaction_amount']['value'] . '</span></li>';
-			} else {
-				echo '<li><span style="color: green;">' . date("l, F j, Y g:iA", strtotime($object['transaction_info']['transaction_initiation_date'])) . ' : ' . $object['transaction_info']['transaction_id'] . ' : $' . $object['transaction_info']['transaction_amount']['value'] . '</span></li>';
-			}
-		}
+$total = 0; // Initialize total balance
 
-		if(isset($object['transaction_info']['available_balance']['value'])) {
-			$total = $object['transaction_info']['available_balance']['value'];
-		}
-	}
+foreach ($transactions as $transaction) {
+    foreach ($transaction as $key => $object) {
+        if(!empty($object['payer_info']['payer_name'])) {
+            if($object['transaction_info']['transaction_amount']['value'] < 0) {
+                echo '<li><span style="color: red;">' . date("l, F j, Y g:iA", strtotime($object['transaction_info']['transaction_initiation_date'])) . ': ' . $object['payer_info']['payer_name']['alternate_full_name'] . ' : $' . $object['transaction_info']['transaction_amount']['value'] . '</span></li>';
+            } else {
+                echo '<li><span style="color: green;">' . date("l, F j, Y g:iA", strtotime($object['transaction_info']['transaction_initiation_date'])) . ' : ' . $object['transaction_info']['transaction_id'] . ' : $' . $object['transaction_info']['transaction_amount']['value'] . '</span></li>';
+            }
+        }
+
+        if(isset($object['transaction_info']['available_balance']['value'])) {
+            $total = $object['transaction_info']['available_balance']['value'];
+        }
+    }
 }
 
 echo '</ol>';
